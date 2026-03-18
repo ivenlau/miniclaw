@@ -2,13 +2,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, Attachment, AttachmentType } from '../chat/types.js';
 import type { ChatAdapter } from '../chat/types.js';
-import { getOrCreateSession, addToHistory } from '../session/manager.js';
+import type { TrackedResource } from '../session/types.js';
+import { getOrCreateSession, addToHistory, addResource, getTurnIndex } from '../session/manager.js';
 import { getPersona } from '../persona/manager.js';
 import { getLLMProvider } from '../llm/registry.js';
 import { classifyIntent, type Intent } from './intent-classifier.js';
+import { executeDirectAction } from './action-executor.js';
 import { generateResponse } from './responder.js';
 import { extractMemory } from './memory-extractor.js';
 import { routeCommand, isCommand } from '../commands/router.js';
+import { resolveCommand } from './command-resolver.js';
 import { runCLITask } from '../cli/runner.js';
 import { getCoreMemory, searchTopicMemories } from '../memory/manager.js';
 import { splitMessage } from '../chat/formatter.js';
@@ -32,12 +35,13 @@ function isDuplicate(messageId: string): boolean {
 }
 
 export async function handleMessage(msg: IncomingMessage, adapter: ChatAdapter) {
-  // Dedup
+  // 1. Dedup
   if (isDuplicate(msg.messageId)) {
     log.debug({ messageId: msg.messageId }, 'Duplicate message, skipping');
     return;
   }
 
+  // 2. Get session
   const session = getOrCreateSession(msg.platform, msg.chatId, msg.senderId);
 
   log.info({
@@ -48,12 +52,25 @@ export async function handleMessage(msg: IncomingMessage, adapter: ChatAdapter) 
     hasAttachments: !!msg.attachments?.length,
   }, 'Incoming message');
 
-  // 0. Download attachments to workspace if present
+  // 3. Download attachments → track to session.resources
   if (msg.attachments?.length) {
     await downloadAttachments(msg, session.workspace, adapter);
+    // Track downloaded attachments as resources
+    const turnIndex = getTurnIndex(session);
+    for (const att of msg.attachments) {
+      if (att.localPath) {
+        addResource(session, {
+          type: att.type,
+          localPath: att.localPath,
+          fileName: att.fileName ?? path.basename(att.localPath),
+          addedAt: Date.now(),
+          turnIndex,
+        });
+      }
+    }
   }
 
-  // 1. Check if it's a command
+  // 4. Check if it's a command
   if (isCommand(msg.content)) {
     const reply = await routeCommand(msg.content, session, adapter);
     if (reply) {
@@ -62,45 +79,75 @@ export async function handleMessage(msg: IncomingMessage, adapter: ChatAdapter) 
     return;
   }
 
-  // 2. Load persona
+  // 5. Load persona & LLM
   const persona = getPersona(msg.senderId, msg.chatId);
-
-  // 3. Get LLM provider
   const llm = getLLMProvider();
 
-  // 4. Classify intent
-  const intent = await classifyIntent(llm, msg.content);
-  log.info({ intent }, 'Intent classified');
+  // 6. Classify intent (context-aware)
+  const intentResult = await classifyIntent(llm, msg.content, session.history, session.resources);
+  log.info({ intent: intentResult.intent, hasResolvedContext: !!intentResult.resolvedContext }, 'Intent classified');
 
-  // 5. Handle by intent
+  // Use resolved context for downstream processing
+  const effectiveMessage = intentResult.resolvedContext ?? msg.content;
+
+  // 7. Handle by intent
   let reply: string;
+  let replyAttachments: Attachment[] | undefined;
 
-  if (intent === 'coding_task') {
-    reply = await handleCodingTask(msg, session, adapter, llm);
-  } else {
-    // question or chitchat — LLM direct response
-    const coreMemory = getCoreMemory();
-    const topicMemories = searchTopicMemories(msg.content);
+  switch (intentResult.intent) {
+    case 'direct_action': {
+      const actionResult = await executeDirectAction(
+        llm,
+        effectiveMessage,
+        session.resources,
+        session.history,
+        session.workspace,
+      );
+      reply = actionResult.reply;
+      replyAttachments = actionResult.resultFiles;
+      break;
+    }
 
-    reply = await generateResponse({
-      llm,
-      persona,
-      coreMemory,
-      topicMemories,
-      workspace: session.workspace,
-      history: session.history,
-      userMessage: msg.content,
-    });
+    case 'coding_task': {
+      // Notify user that task is starting
+      await sendReply(adapter, msg, `🔧 收到编程任务，正在使用 ${session.cliTool} 处理...\n工作目录: ${session.workspace}`);
+      reply = await handleCodingTask(effectiveMessage, msg, session, adapter, llm);
+      break;
+    }
+
+    case 'settings': {
+      const command = await resolveCommand(llm, effectiveMessage, session.history);
+      reply = await routeCommand(command, session, adapter);
+      break;
+    }
+
+    default: {
+      // question or chitchat — LLM direct response
+      const coreMemory = getCoreMemory();
+      const topicMemories = searchTopicMemories(msg.content);
+
+      reply = await generateResponse({
+        llm,
+        persona,
+        coreMemory,
+        topicMemories,
+        workspace: session.workspace,
+        history: session.history,
+        userMessage: effectiveMessage,
+        resources: session.resources,
+      });
+      break;
+    }
   }
 
-  // 6. Send reply
-  await sendReply(adapter, msg, reply);
+  // 8. Send reply
+  await sendReply(adapter, msg, reply, replyAttachments);
 
-  // 7. Update history
+  // 9. Update history
   addToHistory(session, { role: 'user', content: msg.content });
   addToHistory(session, { role: 'assistant', content: reply });
 
-  // 8. Async memory extraction (fire-and-forget)
+  // 10. Async memory extraction (fire-and-forget)
   extractMemory(llm, msg.content, reply).then(async (extraction) => {
     if (extraction.shouldSave && extraction.content) {
       const { saveCoreMemory, saveTopicMemory } = await import('../memory/manager.js');
@@ -116,18 +163,39 @@ export async function handleMessage(msg: IncomingMessage, adapter: ChatAdapter) 
 }
 
 async function handleCodingTask(
+  userMessage: string,
   msg: IncomingMessage,
   session: any,
   adapter: ChatAdapter,
   llm: any,
 ): Promise<string> {
-  log.debug({ promptLen: msg.content.length, prompt: msg.content.slice(0, 500) }, 'CLI task prompt');
+  log.debug({ promptLen: userMessage.length, prompt: userMessage.slice(0, 500) }, 'CLI task prompt');
 
-  // Notify user that task is starting
-  await sendReply(adapter, msg, `🔧 收到编程任务，正在使用 ${session.cliTool} 处理...\n工作目录: ${session.workspace}`);
+  // Build context-enriched prompt for CLI
+  const contextParts: string[] = [];
 
-  // Append instruction for CLI to output file paths
-  const cliPrompt = msg.content + '\n\n[系统提示] 如果你创建、修改或保存了文件，请在输出的最后列出所有相关文件的完整绝对路径。';
+  // Inject resources
+  if (session.resources?.length) {
+    const resourceLines = session.resources.map((r: TrackedResource) => {
+      const desc = r.description ? ` - ${r.description}` : '';
+      return `- ${r.type}: ${r.fileName} (${r.localPath})${desc}`;
+    });
+    contextParts.push(`## 会话中的文件资源\n${resourceLines.join('\n')}`);
+  }
+
+  // Inject recent history
+  if (session.history?.length) {
+    const recent = session.history.slice(-6).map((m: any) =>
+      `${m.role}: ${m.content.slice(0, 300)}`
+    );
+    contextParts.push(`## 最近对话\n${recent.join('\n')}`);
+  }
+
+  // Current task
+  contextParts.push(`## 当前任务\n${userMessage}`);
+
+  const cliPrompt = contextParts.join('\n\n')
+    + '\n\n[系统提示] 如果你创建、修改或保存了文件，请在输出的最后列出所有相关文件的完整绝对路径。';
 
   try {
     const result = await runCLITask({
@@ -140,7 +208,7 @@ async function handleCodingTask(
     // Extract file paths from CLI output and send as attachments
     const outputFiles = extractFilePaths(result);
     if (outputFiles.length > 0) {
-      log.info({ files: outputFiles.map(a => a.localPath) }, 'Output files detected');
+      log.info({ files: outputFiles.map((a: Attachment) => a.localPath) }, 'Output files detected');
       await sendReply(adapter, msg, '', outputFiles);
     }
 
@@ -258,7 +326,7 @@ async function downloadAttachments(
     }
   }
 
-  // Update message content to include detailed file info for CLI tools
+  // Update message content to include detailed file info for downstream use
   const TYPE_LABELS: Record<string, string> = {
     image: '图片文件', file: '文件', audio: '音频文件', video: '视频文件',
   };
