@@ -1,5 +1,6 @@
 import type { ChatMessage } from './types.js';
 import type { Persona } from '../persona/types.js';
+import type { TrackedResource } from '../session/types.js';
 
 interface PromptContext {
   persona: Persona;
@@ -7,6 +8,7 @@ interface PromptContext {
   topicMemories?: string[];
   workspace?: string;
   availableCommands?: string[];
+  resources?: TrackedResource[];
 }
 
 export function buildSystemPrompt(ctx: PromptContext): string {
@@ -32,6 +34,15 @@ export function buildSystemPrompt(ctx: PromptContext): string {
   // Workspace
   if (ctx.workspace) {
     parts.push(`\n# 当前工作目录\n${ctx.workspace}`);
+  }
+
+  // Resources
+  if (ctx.resources?.length) {
+    const resourceLines = ctx.resources.map(r => {
+      const desc = r.description ? ` - ${r.description}` : '';
+      return `- [${r.type}] ${r.fileName} (${r.localPath})${desc}`;
+    });
+    parts.push(`\n# 会话中的文件资源\n${resourceLines.join('\n')}`);
   }
 
   // Commands

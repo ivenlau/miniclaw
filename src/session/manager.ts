@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { Session } from './types.js';
+import type { Session, TrackedResource } from './types.js';
 import type { ChatMessage } from '../llm/types.js';
 import { getConfig } from '../config/loader.js';
 import { createLogger } from '../utils/logger.js';
@@ -29,6 +29,7 @@ export function getOrCreateSession(platform: string, chatId: string, userId: str
       workspace: defaultWs,
       cliTool: config.cli.defaultTool,
       history: [],
+      resources: [],
       activeCLIProcess: null,
       createdAt: Date.now(),
       lastActiveAt: Date.now(),
@@ -41,6 +42,11 @@ export function getOrCreateSession(platform: string, chatId: string, userId: str
   return session;
 }
 
+export function addResource(session: Session, resource: TrackedResource) {
+  session.resources.push(resource);
+  log.debug({ fileName: resource.fileName, type: resource.type }, 'Resource tracked');
+}
+
 export function addToHistory(session: Session, message: ChatMessage) {
   const config = getConfig();
   const max = config.memory.shortTerm.maxMessages;
@@ -50,7 +56,19 @@ export function addToHistory(session: Session, message: ChatMessage) {
   // Sliding window: keep only the last `max` messages
   if (session.history.length > max) {
     session.history = session.history.slice(-max);
+
+    // Sync-clean resources: drop those whose turnIndex is older than remaining history
+    // Each turn = 2 messages (user+assistant), so the oldest surviving turn index is:
+    const oldestTurn = Math.floor(session.history.length / 2);
+    const currentTurn = getTurnIndex(session);
+    const oldestSurvivingTurn = currentTurn - oldestTurn;
+    session.resources = session.resources.filter(r => r.turnIndex >= oldestSurvivingTurn);
   }
+}
+
+export function getTurnIndex(session: Session): number {
+  // A turn = one user message. Count user messages in history.
+  return session.history.filter(m => m.role === 'user').length;
 }
 
 export function clearHistory(session: Session) {

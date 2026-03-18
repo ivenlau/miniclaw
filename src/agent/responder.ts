@@ -1,6 +1,7 @@
 import type { LLMProvider, ChatMessage } from '../llm/types.js';
 import { buildSystemPrompt, buildMessages } from '../llm/prompt-builder.js';
 import type { Persona } from '../persona/types.js';
+import type { TrackedResource } from '../session/types.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('agent:responder');
@@ -13,6 +14,7 @@ interface RespondOptions {
   workspace?: string;
   history: ChatMessage[];
   userMessage: string;
+  resources?: TrackedResource[];
 }
 
 export async function generateResponse(options: RespondOptions): Promise<string> {
@@ -21,6 +23,7 @@ export async function generateResponse(options: RespondOptions): Promise<string>
     coreMemory: options.coreMemory,
     topicMemories: options.topicMemories,
     workspace: options.workspace,
+    resources: options.resources,
     availableCommands: [
       '/workspace [path] - 查看/切换工作目录',
       '/tool <name> - 切换 CLI 工具',

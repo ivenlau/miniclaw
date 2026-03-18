@@ -12,6 +12,8 @@ import { generateResponse } from './responder.js';
 import { extractMemory } from './memory-extractor.js';
 import { routeCommand, isCommand } from '../commands/router.js';
 import { resolveCommand } from './command-resolver.js';
+import { resolveSkill } from './skill-resolver.js';
+import { getSkill, loadWorkspaceSkills, listSkillMetas } from '../skills/registry.js';
 import { runCLITask } from '../cli/runner.js';
 import { getCoreMemory, searchTopicMemories } from '../memory/manager.js';
 import { splitMessage } from '../chat/formatter.js';
@@ -83,6 +85,9 @@ export async function handleMessage(msg: IncomingMessage, adapter: ChatAdapter) 
   const persona = getPersona(msg.senderId, msg.chatId);
   const llm = getLLMProvider();
 
+  // 5.5. Load workspace custom skills (before intent classification so classifier sees them)
+  await loadWorkspaceSkills(session.workspace);
+
   // 6. Classify intent (context-aware)
   const intentResult = await classifyIntent(llm, msg.content, session.history, session.resources);
   log.info({ intent: intentResult.intent, hasResolvedContext: !!intentResult.resolvedContext }, 'Intent classified');
@@ -108,6 +113,33 @@ export async function handleMessage(msg: IncomingMessage, adapter: ChatAdapter) 
       break;
     }
 
+    case 'skill_task': {
+      const resolution = await resolveSkill(llm, effectiveMessage, session.history, session.workspace);
+      if (resolution) {
+        const skill = getSkill(resolution.skillName);
+        if (skill) {
+          const result = await skill.execute(resolution.params, { workspace: session.workspace, llm, cliTool: session.cliTool, sessionId: session.id });
+          reply = result.reply;
+          replyAttachments = result.attachments;
+          break;
+        }
+      }
+      // Fallback: skill resolution failed, use LLM conversation
+      const coreMemory = getCoreMemory();
+      const topicMemories = searchTopicMemories(msg.content);
+      reply = await generateResponse({
+        llm,
+        persona,
+        coreMemory,
+        topicMemories,
+        workspace: session.workspace,
+        history: session.history,
+        userMessage: effectiveMessage,
+        resources: session.resources,
+      });
+      break;
+    }
+
     case 'coding_task': {
       // Notify user that task is starting
       await sendReply(adapter, msg, `🔧 收到编程任务，正在使用 ${session.cliTool} 处理...\n工作目录: ${session.workspace}`);
@@ -122,7 +154,24 @@ export async function handleMessage(msg: IncomingMessage, adapter: ChatAdapter) 
     }
 
     default: {
-      // question or chitchat — LLM direct response
+      // question or chitchat — try custom skills first, then LLM direct response
+      const builtinSkillNames = new Set(['file-read', 'file-write', 'file-search', 'content-search', 'dir-list', 'sys-info']);
+      const hasCustomSkills = listSkillMetas().some(s => !builtinSkillNames.has(s.name));
+
+      if (hasCustomSkills) {
+        const resolution = await resolveSkill(llm, effectiveMessage, session.history, session.workspace);
+        if (resolution) {
+          const skill = getSkill(resolution.skillName);
+          if (skill && !builtinSkillNames.has(skill.name)) {
+            log.info({ skillName: skill.name }, 'Custom skill matched from question/chitchat fallback');
+            const result = await skill.execute(resolution.params, { workspace: session.workspace, llm, cliTool: session.cliTool, sessionId: session.id });
+            reply = result.reply;
+            replyAttachments = result.attachments;
+            break;
+          }
+        }
+      }
+
       const coreMemory = getCoreMemory();
       const topicMemories = searchTopicMemories(msg.content);
 
