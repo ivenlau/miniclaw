@@ -13,7 +13,8 @@ export class ClaudeCodeTool implements CLITool {
   buildCommand(prompt: string) {
     return {
       command: this.command,
-      args: [...this.baseArgs, '--dangerously-skip-permissions', '-p', prompt],
+      args: [...this.baseArgs, '--dangerously-skip-permissions', '-p', '-'],
+      stdinPrompt: prompt,
     };
   }
 }

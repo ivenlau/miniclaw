@@ -1,5 +1,6 @@
+import fs from 'node:fs';
 import path from 'node:path';
-import type { IncomingMessage, Attachment } from '../chat/types.js';
+import type { IncomingMessage, Attachment, AttachmentType } from '../chat/types.js';
 import type { ChatAdapter } from '../chat/types.js';
 import { getOrCreateSession, addToHistory } from '../session/manager.js';
 import { getPersona } from '../persona/manager.js';
@@ -120,16 +121,28 @@ async function handleCodingTask(
   adapter: ChatAdapter,
   llm: any,
 ): Promise<string> {
+  log.debug({ promptLen: msg.content.length, prompt: msg.content.slice(0, 500) }, 'CLI task prompt');
+
   // Notify user that task is starting
   await sendReply(adapter, msg, `🔧 收到编程任务，正在使用 ${session.cliTool} 处理...\n工作目录: ${session.workspace}`);
+
+  // Append instruction for CLI to output file paths
+  const cliPrompt = msg.content + '\n\n[系统提示] 如果你创建、修改或保存了文件，请在输出的最后列出所有相关文件的完整绝对路径。';
 
   try {
     const result = await runCLITask({
       tool: session.cliTool,
-      prompt: msg.content,
+      prompt: cliPrompt,
       workspace: session.workspace,
       sessionId: session.id,
     });
+
+    // Extract file paths from CLI output and send as attachments
+    const outputFiles = extractFilePaths(result);
+    if (outputFiles.length > 0) {
+      log.info({ files: outputFiles.map(a => a.localPath) }, 'Output files detected');
+      await sendReply(adapter, msg, '', outputFiles);
+    }
 
     // Summarize output if needed
     if (result.length > 3000) {
@@ -148,6 +161,53 @@ async function handleCodingTask(
     log.error({ err }, 'CLI task failed');
     return `❌ 任务执行失败: ${err.message ?? err}`;
   }
+}
+
+// ---- File path extraction from CLI output ----
+
+const EXT_TO_TYPE: Record<string, AttachmentType> = {
+  '.jpg': 'image', '.jpeg': 'image', '.png': 'image', '.gif': 'image',
+  '.bmp': 'image', '.webp': 'image', '.svg': 'image',
+  '.mp3': 'audio', '.wav': 'audio', '.amr': 'audio', '.ogg': 'audio',
+  '.mp4': 'video', '.mov': 'video', '.avi': 'video', '.mkv': 'video',
+};
+
+function extractFilePaths(cliOutput: string): Attachment[] {
+  const attachments: Attachment[] = [];
+  const seen = new Set<string>();
+
+  // Match absolute paths: Windows (C:\...) and Unix (/...)
+  // Look for paths that end with a file extension
+  const pathRegex = /(?:[A-Za-z]:[\\\/][^\s"'<>|*?]+\.[a-zA-Z0-9]{1,5}|\/[^\s"'<>|*?]+\.[a-zA-Z0-9]{1,5})/g;
+
+  for (const match of cliOutput.matchAll(pathRegex)) {
+    let filePath = match[0].replace(/[.,;:!?)}\]]+$/, ''); // trim trailing punctuation
+    filePath = path.normalize(filePath);
+
+    if (seen.has(filePath)) continue;
+    seen.add(filePath);
+
+    try {
+      if (!fs.existsSync(filePath)) continue;
+      const stat = fs.statSync(filePath);
+      if (!stat.isFile() || stat.size === 0) continue;
+
+      const ext = path.extname(filePath).toLowerCase();
+      const type: AttachmentType = EXT_TO_TYPE[ext] ?? 'file';
+
+      attachments.push({
+        type,
+        localPath: filePath,
+        fileName: path.basename(filePath),
+      });
+
+      log.debug({ filePath, type, size: stat.size }, 'Extracted output file');
+    } catch {
+      // file doesn't exist or can't access — skip
+    }
+  }
+
+  return attachments;
 }
 
 async function sendReply(
@@ -200,21 +260,30 @@ async function downloadAttachments(
 
   // Update message content to include detailed file info for CLI tools
   const TYPE_LABELS: Record<string, string> = {
-    image: '图片', file: '文件', audio: '音频', video: '视频',
+    image: '图片文件', file: '文件', audio: '音频文件', video: '视频文件',
   };
 
-  const fileDescriptions = msg.attachments
-    .filter(a => a.localPath)
-    .map(a => {
-      const label = TYPE_LABELS[a.type] ?? a.type;
-      const name = a.fileName ?? path.basename(a.localPath!);
-      return `[${label}] ${name} (本地路径: ${a.localPath})`;
-    })
-    .join('\n');
+  const downloadedFiles = msg.attachments.filter(a => a.localPath);
 
-  if (fileDescriptions) {
+  if (downloadedFiles.length > 0) {
+    const fileList = downloadedFiles
+      .map(a => {
+        const label = TYPE_LABELS[a.type] ?? a.type;
+        const name = a.fileName ?? path.basename(a.localPath!);
+        return `  - ${label}: ${name}\n    绝对路径: ${a.localPath}`;
+      })
+      .join('\n');
+
+    const fileBlock = [
+      '',
+      '=== 用户通过聊天发送的附件（已自动下载到本地） ===',
+      fileList,
+      '注意：以上文件已保存在本地，请直接使用上面的绝对路径操作这些文件。',
+      '===',
+    ].join('\n');
+
     msg.content = msg.content
-      ? `${msg.content}\n\n用户发送的附件（已下载到本地）:\n${fileDescriptions}`
-      : `用户发送了附件（已下载到本地）:\n${fileDescriptions}`;
+      ? `${msg.content}\n${fileBlock}`
+      : `用户发送了附件。\n${fileBlock}`;
   }
 }

@@ -13,5 +13,5 @@ export interface CLITaskRequest {
 
 export interface CLITool {
   name: string;
-  buildCommand(prompt: string): { command: string; args: string[] };
+  buildCommand(prompt: string): { command: string; args: string[]; stdinPrompt?: string };
 }

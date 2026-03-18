@@ -17,7 +17,7 @@ export async function runCLITask(request: CLITaskRequest): Promise<string> {
   const toolConfig = config.cli.tools[request.tool];
   const timeout = (toolConfig?.timeout ?? 600) * 1000;
 
-  const { command, args } = tool.buildCommand(request.prompt);
+  const { command, args, stdinPrompt } = tool.buildCommand(request.prompt);
 
   // Resolve ~ and normalize path
   const rawCwd = request.workspace.startsWith('~')
@@ -25,16 +25,22 @@ export async function runCLITask(request: CLITaskRequest): Promise<string> {
     : request.workspace;
   const cwd = path.resolve(rawCwd);
 
-  log.info({ tool: request.tool, command, cwd }, 'Starting CLI task');
+  log.info({ tool: request.tool, command, cwd, useStdin: !!stdinPrompt }, 'Starting CLI task');
 
   return new Promise<string>((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
       shell: true,
       env: { ...process.env },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [stdinPrompt ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
+
+    // Write prompt via stdin to avoid shell escaping issues with newlines/special chars
+    if (stdinPrompt && child.stdin) {
+      child.stdin.write(stdinPrompt);
+      child.stdin.end();
+    }
 
     activeProcesses.set(request.sessionId, child);
 

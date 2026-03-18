@@ -24,6 +24,8 @@ export class DingtalkAdapter implements ChatAdapter {
   private webhooks = new Map<string, string>();
   // Store conversationId → openConversationId mapping for OpenAPI sends
   private openConversationIds = new Map<string, string>();
+  // Store conversationId → senderStaffId for private chat OpenAPI sends
+  private senderUserIds = new Map<string, string>();
 
   constructor(clientId: string, clientSecret: string) {
     this.clientId = clientId;
@@ -65,8 +67,23 @@ export class DingtalkAdapter implements ChatAdapter {
             this.openConversationIds.set(chatId, data.conversationId);
           }
 
+          // Save sender userId for private chat OpenAPI sends
+          const senderUserId = data.senderStaffId ?? data.senderId ?? '';
+          if (senderUserId && chatId) {
+            this.senderUserIds.set(chatId, senderUserId);
+          }
+
           // Parse attachments from media messages
           const msgtype = data.msgtype ?? 'text';
+          log.debug({
+            msgtype,
+            hasDownloadCode: !!data.downloadCode,
+            hasContent: !!data.content,
+            contentType: typeof data.content,
+            hasRichText: !!data.content?.richText,
+            fileName: data.fileName,
+            rawKeys: Object.keys(data),
+          }, 'Raw DingTalk message fields');
           const attachments = parseAttachments(data, msgtype);
           const content = extractTextContent(data, msgtype);
 
@@ -114,6 +131,7 @@ export class DingtalkAdapter implements ChatAdapter {
     }
     this.webhooks.clear();
     this.openConversationIds.clear();
+    this.senderUserIds.clear();
     log.info('DingTalk adapter stopped');
   }
 
@@ -235,15 +253,10 @@ export class DingtalkAdapter implements ChatAdapter {
         // Image with public URL — send directly
         await this.sendViaOpenAPI(msg, 'sampleImageMsg', { photoURL: att.url });
       } else if (att.type === 'image' && att.localPath) {
-        // Image from local file — upload first
+        // Image from local file — upload first, then send as image message
+        // DingTalk sampleImageMsg supports both URL and mediaId in photoURL field
         const mediaId = await this.uploadMedia(att.localPath, 'image');
-        // For images, we need a URL; use mediaId approach isn't supported for sampleImageMsg
-        // Upload and use sampleImageMsg won't work, fallback to file
-        await this.sendViaOpenAPI(msg, 'sampleFile', {
-          mediaId,
-          fileName: att.fileName ?? path.basename(att.localPath),
-          fileType: path.extname(att.localPath).slice(1) || 'png',
-        });
+        await this.sendViaOpenAPI(msg, 'sampleImageMsg', { photoURL: mediaId });
       } else if (att.localPath) {
         // File/audio/video — upload and send
         const uploadType = att.type === 'audio' ? 'voice' : att.type === 'video' ? 'video' : 'file';
@@ -311,7 +324,7 @@ export class DingtalkAdapter implements ChatAdapter {
         },
         body: JSON.stringify({
           robotCode: this.clientId,
-          userIds: [msg.replyToMessageId ?? ''],  // need actual userId
+          userIds: [this.senderUserIds.get(msg.chatId) ?? msg.replyToMessageId ?? ''],
           msgKey,
           msgParam: JSON.stringify(msgParam),
         }),
@@ -366,11 +379,23 @@ function parseAttachments(data: any, msgtype: string): Attachment[] {
   const attachments: Attachment[] = [];
   const type = MEDIA_TYPES[msgtype];
 
-  if (type && data.downloadCode) {
+  // Try to find downloadCode — it may be at top level or inside content JSON
+  let downloadCode = data.downloadCode;
+  let fileName = data.fileName;
+
+  if (!downloadCode && type && typeof data.content === 'string') {
+    try {
+      const parsed = JSON.parse(data.content);
+      downloadCode = parsed.downloadCode;
+      fileName = fileName ?? parsed.fileName;
+    } catch {}
+  }
+
+  if (type && downloadCode) {
     attachments.push({
       type,
-      downloadCode: data.downloadCode,
-      fileName: data.fileName,
+      downloadCode,
+      fileName,
     });
   }
 
