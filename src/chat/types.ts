@@ -1,3 +1,14 @@
+export type AttachmentType = 'image' | 'file' | 'audio' | 'video';
+
+export interface Attachment {
+  type: AttachmentType;
+  fileName?: string;
+  downloadCode?: string;   // 钉钉 downloadCode，用于换取下载 URL
+  localPath?: string;      // 下载到本地后的路径
+  url?: string;            // 公网可访问 URL
+  mediaId?: string;        // 钉钉 mediaId，用于发送
+}
+
 export interface IncomingMessage {
   platform: string;
   messageId: string;
@@ -6,12 +17,15 @@ export interface IncomingMessage {
   senderId: string;
   senderName: string;
   content: string;
+  attachments?: Attachment[];
   rawEvent?: unknown;
 }
 
 export interface OutgoingMessage {
   chatId: string;
+  chatType?: 'group' | 'private';
   content: string;
+  attachments?: Attachment[];
   replyToMessageId?: string;
 }
 

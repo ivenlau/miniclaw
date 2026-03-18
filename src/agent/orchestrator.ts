@@ -1,4 +1,5 @@
-import type { IncomingMessage } from '../chat/types.js';
+import path from 'node:path';
+import type { IncomingMessage, Attachment } from '../chat/types.js';
 import type { ChatAdapter } from '../chat/types.js';
 import { getOrCreateSession, addToHistory } from '../session/manager.js';
 import { getPersona } from '../persona/manager.js';
@@ -43,7 +44,13 @@ export async function handleMessage(msg: IncomingMessage, adapter: ChatAdapter) 
     chatId: msg.chatId,
     sender: msg.senderName,
     content: msg.content.slice(0, 100),
+    hasAttachments: !!msg.attachments?.length,
   }, 'Incoming message');
+
+  // 0. Download attachments to workspace if present
+  if (msg.attachments?.length) {
+    await downloadAttachments(msg, session.workspace, adapter);
+  }
 
   // 1. Check if it's a command
   if (isCommand(msg.content)) {
@@ -143,13 +150,63 @@ async function handleCodingTask(
   }
 }
 
-async function sendReply(adapter: ChatAdapter, msg: IncomingMessage, content: string) {
+async function sendReply(
+  adapter: ChatAdapter,
+  msg: IncomingMessage,
+  content: string,
+  attachments?: Attachment[],
+) {
   const chunks = splitMessage(content);
-  for (const chunk of chunks) {
+  for (let i = 0; i < chunks.length; i++) {
     await adapter.send({
       chatId: msg.chatId,
-      content: chunk,
+      chatType: msg.chatType,
+      content: chunks[i],
+      // Attach files only with the last chunk
+      attachments: i === chunks.length - 1 ? attachments : undefined,
       replyToMessageId: msg.messageId,
     });
+  }
+}
+
+async function downloadAttachments(
+  msg: IncomingMessage,
+  workspace: string,
+  adapter: ChatAdapter,
+) {
+  if (!msg.attachments?.length) return;
+
+  const downloadDir = path.join(workspace, '.miniclaw-files');
+
+  for (const att of msg.attachments) {
+    if (!att.downloadCode) continue;
+
+    try {
+      // DingtalkAdapter has downloadFile method
+      const dingtalk = adapter as any;
+      if (typeof dingtalk.downloadFile === 'function') {
+        const localPath = await dingtalk.downloadFile(
+          att.downloadCode,
+          downloadDir,
+          att.fileName,
+        );
+        att.localPath = localPath;
+        log.info({ type: att.type, fileName: att.fileName, localPath }, 'Attachment downloaded');
+      }
+    } catch (err) {
+      log.error({ err, type: att.type, fileName: att.fileName }, 'Failed to download attachment');
+    }
+  }
+
+  // Update message content to include file info
+  const fileDescriptions = msg.attachments
+    .filter(a => a.localPath)
+    .map(a => `📎 ${a.fileName ?? path.basename(a.localPath!)} → ${a.localPath}`)
+    .join('\n');
+
+  if (fileDescriptions) {
+    msg.content = msg.content
+      ? `${msg.content}\n\n收到的文件:\n${fileDescriptions}`
+      : `收到的文件:\n${fileDescriptions}`;
   }
 }
