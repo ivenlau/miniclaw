@@ -242,10 +242,10 @@ async function downloadAttachments(
     if (!att.downloadCode) continue;
 
     try {
-      // DingtalkAdapter has downloadFile method
-      const dingtalk = adapter as any;
-      if (typeof dingtalk.downloadFile === 'function') {
-        const localPath = await dingtalk.downloadFile(
+      // Both DingtalkAdapter and FeishuAdapter have downloadFile method
+      const adapterAny = adapter as any;
+      if (typeof adapterAny.downloadFile === 'function') {
+        const localPath = await adapterAny.downloadFile(
           att.downloadCode,
           downloadDir,
           att.fileName,

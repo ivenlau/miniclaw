@@ -13,8 +13,7 @@ export class OpenCodeTool implements CLITool {
   buildCommand(prompt: string) {
     return {
       command: this.command,
-      args: [...this.baseArgs],
-      stdinPrompt: prompt,
+      args: [...this.baseArgs, 'run', prompt],
     };
   }
 }

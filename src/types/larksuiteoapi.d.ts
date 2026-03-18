@@ -26,6 +26,39 @@ declare module '@larksuiteoapi/node-sdk' {
           };
           params: { receive_id_type: string };
         }): Promise<any>;
+        reply(options: {
+          path: { message_id: string };
+          data: {
+            msg_type: string;
+            content: string;
+          };
+        }): Promise<any>;
+      };
+      messageResource: {
+        get(options: {
+          path: { message_id: string; file_key: string };
+          params: { type: string };
+        }): Promise<ReadableStream | any>;
+      };
+      image: {
+        create(options: {
+          data: {
+            image_type: string;
+            image: any;
+          };
+        }): Promise<any>;
+        get(options: {
+          path: { image_key: string };
+        }): Promise<any>;
+      };
+      file: {
+        create(options: {
+          data: {
+            file_type: string;
+            file_name: string;
+            file: any;
+          };
+        }): Promise<any>;
       };
     };
   }

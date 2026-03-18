@@ -19,8 +19,12 @@ export function getAllAdapters(): ChatAdapter[] {
 
 export async function startAllAdapters() {
   for (const adapter of adapters.values()) {
-    await adapter.start();
-    log.info({ name: adapter.name }, 'Chat adapter started');
+    try {
+      await adapter.start();
+      log.info({ name: adapter.name }, 'Chat adapter started');
+    } catch (err) {
+      log.error({ err, name: adapter.name }, 'Chat adapter failed to start, skipping');
+    }
   }
 }
 

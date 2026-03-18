@@ -13,7 +13,7 @@ export class CodexTool implements CLITool {
   buildCommand(prompt: string) {
     return {
       command: this.command,
-      args: [...this.baseArgs],
+      args: [...this.baseArgs, 'exec', '--skip-git-repo-check', '-'],
       stdinPrompt: prompt,
     };
   }
