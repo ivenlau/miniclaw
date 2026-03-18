@@ -1,0 +1,78 @@
+server:
+  port: 3000
+  host: "0.0.0.0"
+
+workspace:
+  default: "~/workspace"
+  autoCreate: true
+
+llm:
+  provider: "zhipuai"
+  providers:
+    zhipuai:
+      apiKey: "${ZHIPUAI_API_KEY}"
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4"
+      model: "glm-4.7"
+    minimax:
+      apiKey: "${MINIMAX_API_KEY}"
+      baseUrl: "https://api.minimax.chat/v1"
+      model: "MiniMax-M2.5"
+    doubao:
+      apiKey: "${DOUBAO_API_KEY}"
+      baseUrl: "https://ark.cn-beijing.volces.com/api/v3"
+      endpointId: "${DOUBAO_ENDPOINT_ID}"
+    openai:
+      apiKey: "${OPENAI_API_KEY}"
+      baseUrl: "https://api.openai.com/v1"
+      model: "gpt-4o"
+
+chat:
+  adapters:
+    dingtalk:
+      enabled: true
+      clientId: "${DINGTALK_CLIENT_ID}"
+      clientSecret: "${DINGTALK_CLIENT_SECRET}"
+    feishu:
+      enabled: false
+      appId: "${FEISHU_APP_ID}"
+      appSecret: "${FEISHU_APP_SECRET}"
+
+persona:
+  default:
+    name: "MiniClaw"
+    systemPrompt: "你是 MiniClaw，一个资深全栈工程师助手。说话简洁专业。"
+    tone: "professional"
+    language: "zh-CN"
+
+cli:
+  defaultTool: "claude-code"
+  tools:
+    claude-code:
+      command: "claude"
+      args: ["--print", "--dangerously-skip-permissions"]
+      timeout: 600
+    codex:
+      command: "codex"
+      args: []
+      timeout: 600
+    opencode:
+      command: "opencode"
+      args: []
+      timeout: 600
+
+memory:
+  shortTerm:
+    maxMessages: 20
+  longTerm:
+    coreFile: "./data/memory.md"
+    topicDir: "./data/memory/"
+    maxCoreLines: 200
+    maxTopicFilesPerQuery: 3
+
+scheduler:
+  enabled: true
+
+reporting:
+  progressInterval: 60
+  longTaskThreshold: 120
+  summarizeOutput: true

@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Runtime data (memory, database)
+data/
+*.db
+*.db-journal
+*.db-wal
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Local config (contains API keys)
+config.yaml
+config.yml
+!config.example.yaml
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
