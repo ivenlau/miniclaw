@@ -166,7 +166,21 @@ export class DingtalkAdapter implements ChatAdapter {
     const buffer = Buffer.from(await fileRes.arrayBuffer());
     fs.mkdirSync(destDir, { recursive: true });
 
-    const destFile = path.join(destDir, fileName ?? `download_${Date.now()}`);
+    // Determine file name with extension
+    let finalName = fileName;
+    if (!finalName) {
+      // Try to get extension from Content-Type header
+      const contentType = fileRes.headers.get('content-type') ?? '';
+      const ext = MIME_TO_EXT[contentType] ?? guessExtFromUrl(downloadUrl) ?? '';
+      finalName = `download_${Date.now()}${ext}`;
+    } else if (!path.extname(finalName)) {
+      // fileName exists but has no extension
+      const contentType = fileRes.headers.get('content-type') ?? '';
+      const ext = MIME_TO_EXT[contentType] ?? '';
+      finalName = `${finalName}${ext}`;
+    }
+
+    const destFile = path.join(destDir, finalName);
     fs.writeFileSync(destFile, buffer);
 
     log.info({ destFile, size: buffer.length }, 'File downloaded');
@@ -403,5 +417,35 @@ function extractTextContent(data: any, msgtype: string): string {
   if (msgtype === 'audio') return '[语音]';
   if (msgtype === 'video') return '[视频]';
 
+  return '';
+}
+
+// ---- MIME type to extension mapping ----
+
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/gif': '.gif',
+  'image/bmp': '.bmp',
+  'image/webp': '.webp',
+  'audio/amr': '.amr',
+  'audio/mpeg': '.mp3',
+  'audio/wav': '.wav',
+  'video/mp4': '.mp4',
+  'application/pdf': '.pdf',
+  'application/zip': '.zip',
+  'application/x-rar-compressed': '.rar',
+  'application/msword': '.doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/vnd.ms-excel': '.xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+};
+
+function guessExtFromUrl(url: string): string {
+  try {
+    const pathname = new URL(url).pathname;
+    const ext = path.extname(pathname);
+    if (ext && ext.length <= 5) return ext;
+  } catch {}
   return '';
 }

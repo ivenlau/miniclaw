@@ -198,15 +198,23 @@ async function downloadAttachments(
     }
   }
 
-  // Update message content to include file info
+  // Update message content to include detailed file info for CLI tools
+  const TYPE_LABELS: Record<string, string> = {
+    image: '图片', file: '文件', audio: '音频', video: '视频',
+  };
+
   const fileDescriptions = msg.attachments
     .filter(a => a.localPath)
-    .map(a => `📎 ${a.fileName ?? path.basename(a.localPath!)} → ${a.localPath}`)
+    .map(a => {
+      const label = TYPE_LABELS[a.type] ?? a.type;
+      const name = a.fileName ?? path.basename(a.localPath!);
+      return `[${label}] ${name} (本地路径: ${a.localPath})`;
+    })
     .join('\n');
 
   if (fileDescriptions) {
     msg.content = msg.content
-      ? `${msg.content}\n\n收到的文件:\n${fileDescriptions}`
-      : `收到的文件:\n${fileDescriptions}`;
+      ? `${msg.content}\n\n用户发送的附件（已下载到本地）:\n${fileDescriptions}`
+      : `用户发送了附件（已下载到本地）:\n${fileDescriptions}`;
   }
 }
