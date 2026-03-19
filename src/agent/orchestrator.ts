@@ -154,20 +154,22 @@ export async function handleMessage(msg: IncomingMessage, adapter: ChatAdapter) 
     }
 
     default: {
-      // question or chitchat — try custom skills first, then LLM direct response
-      const builtinSkillNames = new Set(['file-read', 'file-write', 'file-search', 'content-search', 'dir-list', 'sys-info']);
-      const hasCustomSkills = listSkillMetas().some(s => !builtinSkillNames.has(s.name));
+      // question — try custom skills first; chitchat — skip skill resolution, go straight to LLM
+      if (intentResult.intent === 'question') {
+        const builtinSkillNames = new Set(['file-read', 'file-write', 'file-search', 'content-search', 'dir-list', 'sys-info']);
+        const hasCustomSkills = listSkillMetas().some(s => !builtinSkillNames.has(s.name));
 
-      if (hasCustomSkills) {
-        const resolution = await resolveSkill(llm, effectiveMessage, session.history, session.workspace);
-        if (resolution) {
-          const skill = getSkill(resolution.skillName);
-          if (skill && !builtinSkillNames.has(skill.name)) {
-            log.info({ skillName: skill.name }, 'Custom skill matched from question/chitchat fallback');
-            const result = await skill.execute(resolution.params, { workspace: session.workspace, llm, cliTool: session.cliTool, sessionId: session.id });
-            reply = result.reply;
-            replyAttachments = result.attachments;
-            break;
+        if (hasCustomSkills) {
+          const resolution = await resolveSkill(llm, effectiveMessage, session.history, session.workspace);
+          if (resolution) {
+            const skill = getSkill(resolution.skillName);
+            if (skill && !builtinSkillNames.has(skill.name)) {
+              log.info({ skillName: skill.name }, 'Custom skill matched from question fallback');
+              const result = await skill.execute(resolution.params, { workspace: session.workspace, llm, cliTool: session.cliTool, sessionId: session.id });
+              reply = result.reply;
+              replyAttachments = result.attachments;
+              break;
+            }
           }
         }
       }

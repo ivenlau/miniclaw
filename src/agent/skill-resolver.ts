@@ -1,6 +1,7 @@
 import type { LLMProvider, ChatMessage } from '../llm/types.js';
 import { listSkillMetas, getSkill } from '../skills/registry.js';
 import { createLogger } from '../utils/logger.js';
+import { extractJSON } from '../utils/llm-parse.js';
 
 const log = createLogger('agent:skill-resolver');
 
@@ -60,9 +61,9 @@ export async function resolveSkill(
     });
 
     const raw = result.content.trim();
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
+    const jsonStr = extractJSON(raw);
+    if (jsonStr) {
+      const parsed = JSON.parse(jsonStr);
       if (typeof parsed.skillName === 'string' && parsed.params) {
         log.info({ userMessage: userMessage.slice(0, 80), skillName: parsed.skillName }, 'Skill resolved');
         return {

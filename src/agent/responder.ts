@@ -2,6 +2,7 @@ import type { LLMProvider, ChatMessage } from '../llm/types.js';
 import { buildSystemPrompt, buildMessages } from '../llm/prompt-builder.js';
 import type { Persona } from '../persona/types.js';
 import type { TrackedResource } from '../session/types.js';
+import { stripThink } from '../utils/llm-parse.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('agent:responder');
@@ -44,7 +45,7 @@ export async function generateResponse(options: RespondOptions): Promise<string>
       messages,
       temperature: 0.7,
     });
-    return result.content;
+    return stripThink(result.content);
   } catch (err) {
     log.error({ err }, 'Failed to generate response');
     return '抱歉，我遇到了一些问题，暂时无法回复。请稍后再试。';

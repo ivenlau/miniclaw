@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { Skill, SkillContext } from './types.js';
+import { stripThink } from '../utils/llm-parse.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('skills:md-loader');
@@ -84,7 +85,7 @@ async function loadSkillFromDir(skillDir: string): Promise<Skill | null> {
         maxTokens: 4000,
       });
 
-      return { reply: result.content };
+      return { reply: stripThink(result.content) };
     },
   };
 }

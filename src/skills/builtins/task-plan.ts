@@ -1,6 +1,7 @@
 import type { Skill, SkillContext, SkillResult } from '../types.js';
 import { listSkillMetas, getSkill } from '../registry.js';
 import { runCLITask } from '../../cli/runner.js';
+import { stripThink } from '../../utils/llm-parse.js';
 import { createLogger } from '../../utils/logger.js';
 
 const log = createLogger('skill:task-plan');
@@ -172,7 +173,7 @@ async function executeStep(
           ],
           maxTokens: 2000,
         });
-        output = result.content;
+        output = stripThink(result.content);
         break;
       }
 

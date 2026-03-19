@@ -25,7 +25,16 @@ export async function handleSchedule(args: string, session: Session, _adapter: C
 
   if (subcommand === 'delete') {
     const id = parts[1];
-    if (!id) return '用法: /schedule delete <id>';
+    if (!id) return '用法: /schedule delete <id|all>';
+    if (id === 'all') {
+      const tasks = getAllTasks();
+      if (tasks.length === 0) return '没有定时任务可删除';
+      let count = 0;
+      for (const t of tasks) {
+        if (deleteTask(t.id)) count++;
+      }
+      return `已删除全部 ${count} 个定时任务`;
+    }
     return deleteTask(id) ? `已删除任务 ${id}` : `未找到任务 ${id}`;
   }
 
