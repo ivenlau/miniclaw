@@ -142,7 +142,7 @@ export async function handleMessage(msg: IncomingMessage, adapter: ChatAdapter) 
 
     case 'coding_task': {
       // Notify user that task is starting
-      await sendReply(adapter, msg, `🔧 收到编程任务，正在使用 ${session.cliTool} 处理...\n工作目录: ${session.workspace}`);
+      await sendReply(adapter, msg, `⚡ 正在处理，稍等片刻...`);
       reply = await handleCodingTask(effectiveMessage, msg, session, adapter, llm);
       break;
     }
@@ -270,13 +270,13 @@ async function handleCodingTask(
         ],
         maxTokens: 1000,
       });
-      return `✅ 任务完成\n\n${summary.content}`;
+      return `✅ 搞定了\n\n${summary.content}`;
     }
 
-    return `✅ 任务完成\n\n${result}`;
+    return `✅ 搞定了\n\n${result}`;
   } catch (err: any) {
     log.error({ err }, 'CLI task failed');
-    return `❌ 任务执行失败: ${err.message ?? err}`;
+    return `😥 出了点问题: ${err.message ?? err}`;
   }
 }
 

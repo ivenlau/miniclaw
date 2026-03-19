@@ -20,7 +20,7 @@ export async function executeTask(task: ScheduledTask) {
 
     // Send result to chat target if specified
     if (task.chatTarget) {
-      await sendResult(task.chatTarget, `📋 定时任务 "${task.name}" 执行完成\n\n${result}`);
+      await sendResult(task.chatTarget, `⏰ 定时任务「${task.name}」已完成\n\n${result}`);
     }
 
     log.info({ taskId: task.id }, 'Scheduled task completed');
@@ -28,7 +28,7 @@ export async function executeTask(task: ScheduledTask) {
     log.error({ err, taskId: task.id }, 'Scheduled task failed');
 
     if (task.chatTarget) {
-      await sendResult(task.chatTarget, `❌ 定时任务 "${task.name}" 执行失败: ${err.message}`);
+      await sendResult(task.chatTarget, `⏰ 定时任务「${task.name}」失败: ${err.message}`);
     }
   }
 }

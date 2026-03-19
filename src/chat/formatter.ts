@@ -45,5 +45,5 @@ export function formatProgressMessage(output: string, elapsed: number): string {
   const seconds = elapsed % 60;
   const timeStr = minutes > 0 ? `${minutes}m${seconds}s` : `${seconds}s`;
   const lastLines = output.split('\n').slice(-5).join('\n');
-  return `⏳ 任务运行中 (${timeStr})...\n\n最近输出:\n${formatCodeBlock(lastLines)}`;
+  return `🔄 还在跑 (${timeStr})...\n\n最近输出:\n${formatCodeBlock(lastLines)}`;
 }

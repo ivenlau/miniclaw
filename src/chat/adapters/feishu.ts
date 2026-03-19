@@ -79,7 +79,7 @@ export class FeishuAdapter implements ChatAdapter {
 
             // Send typing indicator by replying to the message
             const typingContent = content || (attachments.length > 0 ? `[${attachments[0].type}]` : '...');
-            this.replyText(message.message_id, `> ${typingContent}\n\n⌨️ 正在思考...`).catch(() => {});
+            this.replyText(message.message_id, `> ${typingContent}\n\n💭 思考中...`).catch(() => {});
 
             // Fire and forget
             Promise.resolve(this.handler?.(msg)).catch((err) => {
