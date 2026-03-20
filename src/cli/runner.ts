@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { getCLITool } from './registry.js';
@@ -24,6 +25,7 @@ export async function runCLITask(request: CLITaskRequest): Promise<string> {
     ? request.workspace.replace(/^~/, process.env.HOME ?? process.env.USERPROFILE ?? '.')
     : request.workspace;
   const cwd = path.resolve(rawCwd);
+  fs.mkdirSync(cwd, { recursive: true });
 
   log.info({ tool: request.tool, command, cwd, useStdin: !!stdinPrompt }, 'Starting CLI task');
 
