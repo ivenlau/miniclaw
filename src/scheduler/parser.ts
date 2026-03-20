@@ -1,4 +1,6 @@
-import type { LLMProvider } from '../llm/types.js';
+import type { Model, Api } from '@mariozechner/pi-ai';
+import { llmComplete, extractText } from '../llm/pi-ai-adapter.js';
+import { stripThink } from '../utils/llm-parse.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('scheduler:parser');
@@ -15,18 +17,20 @@ const PARSE_PROMPT = `你是一个 cron 表达式解析器。将用户的自然�
 
 只返回 cron 表达式，不要返回其他内容。如果无法解析，返回 "INVALID"。`;
 
-export async function parseNaturalLanguageToCron(llm: LLMProvider, description: string): Promise<string | null> {
+export async function parseNaturalLanguageToCron(
+  model: Model<Api>,
+  apiKey: string,
+  description: string,
+): Promise<string | null> {
   try {
-    const result = await llm.chat({
+    const result = await llmComplete(model, {
+      systemPrompt: PARSE_PROMPT,
       messages: [
-        { role: 'system', content: PARSE_PROMPT },
-        { role: 'user', content: description },
+        { role: 'user', content: description, timestamp: Date.now() },
       ],
-      temperature: 0,
-      maxTokens: 30,
-    });
+    }, { temperature: 0, maxTokens: 30, apiKey });
 
-    const cron = result.content.trim();
+    const cron = stripThink(extractText(result)).trim();
     if (cron === 'INVALID' || !isValidCron(cron)) {
       log.warn({ description, result: cron }, 'Failed to parse cron expression');
       return null;

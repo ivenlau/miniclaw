@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { Session, TrackedResource } from './types.js';
-import type { ChatMessage } from '../llm/types.js';
+import type { Message } from '@mariozechner/pi-ai';
 import { getConfig } from '../config/loader.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -31,6 +31,7 @@ export function getOrCreateSession(platform: string, chatId: string, userId: str
       history: [],
       resources: [],
       activeCLIProcess: null,
+      pendingAttachments: [],
       createdAt: Date.now(),
       lastActiveAt: Date.now(),
     };
@@ -47,7 +48,7 @@ export function addResource(session: Session, resource: TrackedResource) {
   log.debug({ fileName: resource.fileName, type: resource.type }, 'Resource tracked');
 }
 
-export function addToHistory(session: Session, message: ChatMessage) {
+export function addToHistory(session: Session, message: Message) {
   const config = getConfig();
   const max = config.memory.shortTerm.maxMessages;
 
@@ -58,7 +59,6 @@ export function addToHistory(session: Session, message: ChatMessage) {
     session.history = session.history.slice(-max);
 
     // Sync-clean resources: drop those whose turnIndex is older than remaining history
-    // Each turn = 2 messages (user+assistant), so the oldest surviving turn index is:
     const oldestTurn = Math.floor(session.history.length / 2);
     const currentTurn = getTurnIndex(session);
     const oldestSurvivingTurn = currentTurn - oldestTurn;
@@ -67,12 +67,15 @@ export function addToHistory(session: Session, message: ChatMessage) {
 }
 
 export function getTurnIndex(session: Session): number {
-  // A turn = one user message. Count user messages in history.
   return session.history.filter(m => m.role === 'user').length;
 }
 
 export function clearHistory(session: Session) {
   session.history = [];
+  // Also clear agent messages if agent exists
+  if (session.agent) {
+    session.agent.clearMessages();
+  }
 }
 
 export function getSession(platform: string, chatId: string): Session | undefined {

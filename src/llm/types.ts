@@ -1,28 +1,20 @@
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
+// Re-export pi-ai types used throughout the codebase
+export type {
+  Model,
+  Api,
+  Context,
+  Message,
+  UserMessage,
+  AssistantMessage,
+  ToolResultMessage,
+  TextContent,
+  ImageContent,
+  ThinkingContent,
+  ToolCall,
+  Tool,
+  Usage,
+  StopReason,
+  AssistantMessageEvent,
+} from '@mariozechner/pi-ai';
 
-export interface ChatCompletionOptions {
-  messages: ChatMessage[];
-  model?: string;
-  temperature?: number;
-  maxTokens?: number;
-  stream?: boolean;
-}
-
-export interface ChatCompletionResult {
-  content: string;
-  usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-  model: string;
-}
-
-export interface LLMProvider {
-  name: string;
-  chat(options: ChatCompletionOptions): Promise<ChatCompletionResult>;
-  chatStream(options: ChatCompletionOptions): AsyncIterable<string>;
-}
+export { Type, type Static, type TSchema } from '@mariozechner/pi-ai';

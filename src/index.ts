@@ -7,7 +7,6 @@ import { registerAdapter, startAllAdapters, stopAllAdapters } from './chat/regis
 import { DingtalkAdapter } from './chat/adapters/dingtalk.js';
 import { FeishuAdapter } from './chat/adapters/feishu.js';
 import { initScheduler, stopScheduler } from './scheduler/manager.js';
-import { initSkills } from './skills/registry.js';
 import { handleMessage } from './agent/orchestrator.js';
 import path from 'node:path';
 
@@ -24,14 +23,11 @@ async function main() {
   const dataDir = path.resolve('./data');
   initDb(dataDir);
 
-  // 3. Init LLM providers
+  // 3. Init LLM providers (now using pi-ai models)
   initLLMProviders(config);
 
   // 4. Init CLI tools
   initCLITools(config);
-
-  // 4.5. Init skills
-  await initSkills();
 
   // 5. Init chat adapters
   const chatConfig = config.chat.adapters;

@@ -1,4 +1,3 @@
-import type { ChatMessage } from './types.js';
 import type { Persona } from '../persona/types.js';
 import type { TrackedResource } from '../session/types.js';
 
@@ -7,7 +6,6 @@ interface PromptContext {
   coreMemory?: string;
   topicMemories?: string[];
   workspace?: string;
-  availableCommands?: string[];
   resources?: TrackedResource[];
 }
 
@@ -45,22 +43,5 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     parts.push(`\n# 会话中的文件资源\n${resourceLines.join('\n')}`);
   }
 
-  // Commands
-  if (ctx.availableCommands?.length) {
-    parts.push(`\n# 可用命令\n${ctx.availableCommands.map(c => `- ${c}`).join('\n')}`);
-  }
-
   return parts.join('\n\n');
-}
-
-export function buildMessages(
-  systemPrompt: string,
-  history: ChatMessage[],
-  userMessage: string,
-): ChatMessage[] {
-  return [
-    { role: 'system', content: systemPrompt },
-    ...history,
-    { role: 'user', content: userMessage },
-  ];
 }

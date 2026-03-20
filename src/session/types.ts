@@ -1,5 +1,6 @@
-import type { ChatMessage } from '../llm/types.js';
-import type { AttachmentType } from '../chat/types.js';
+import type { Agent } from '@mariozechner/pi-agent-core';
+import type { Message } from '@mariozechner/pi-ai';
+import type { Attachment, AttachmentType } from '../chat/types.js';
 
 export interface TrackedResource {
   type: AttachmentType;        // 'image' | 'file' | 'audio' | 'video'
@@ -17,9 +18,11 @@ export interface Session {
   userId: string;
   workspace: string;
   cliTool: string;
-  history: ChatMessage[];
+  history: Message[];
   resources: TrackedResource[];
-  activeCLIProcess: string | null;   // process ID if a CLI task is running
+  activeCLIProcess: string | null;
+  agent?: Agent;
+  pendingAttachments: Attachment[];
   createdAt: number;
   lastActiveAt: number;
 }

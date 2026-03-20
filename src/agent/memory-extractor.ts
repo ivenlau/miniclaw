@@ -1,4 +1,6 @@
-import type { LLMProvider } from '../llm/types.js';
+import { getLLMModel, getLLMApiKey } from '../llm/registry.js';
+import { llmComplete, extractText } from '../llm/pi-ai-adapter.js';
+import { extractJSON } from '../utils/llm-parse.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('agent:memory-extractor');
@@ -32,21 +34,23 @@ const EXTRACT_PROMPT = `你是一个记忆提取器。分析下面的对话，�
 只返回 JSON，不要返回其他内容。`;
 
 export async function extractMemory(
-  llm: LLMProvider,
   userMessage: string,
   assistantReply: string,
 ): Promise<ExtractionResult> {
   try {
-    const result = await llm.chat({
+    const model = getLLMModel();
+    const apiKey = getLLMApiKey();
+    const result = await llmComplete(model, {
+      systemPrompt: EXTRACT_PROMPT,
       messages: [
-        { role: 'system', content: EXTRACT_PROMPT },
-        { role: 'user', content: `用户: ${userMessage}\n助手: ${assistantReply}` },
+        { role: 'user', content: `用户: ${userMessage}\n助手: ${assistantReply}`, timestamp: Date.now() },
       ],
-      temperature: 0,
-      maxTokens: 300,
-    });
+    }, { temperature: 0, maxTokens: 300, apiKey });
 
-    const parsed = JSON.parse(result.content.trim());
+    const raw = extractText(result);
+    const jsonStr = extractJSON(raw);
+    if (!jsonStr) return { shouldSave: false };
+    const parsed = JSON.parse(jsonStr);
     return parsed as ExtractionResult;
   } catch (err) {
     log.debug({ err }, 'Memory extraction failed or nothing to extract');
