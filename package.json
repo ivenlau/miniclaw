@@ -3,11 +3,18 @@
   "version": "0.1.0",
   "description": "智能 AI Agent 代理工具 - 钉钉/飞书对话驱动的编程助手",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "bin": {
+    "miniclaw": "./dist/cli.js"
+  },
+  "files": [
+    "dist/"
+  ],
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "build": "tsc",
+    "prepublishOnly": "npm run build",
     "test": "vitest",
     "test:run": "vitest run"
   },
@@ -19,7 +26,9 @@
     "@larksuiteoapi/node-sdk": "^1.59.0",
     "@mariozechner/pi-agent-core": "^0.60.0",
     "@mariozechner/pi-ai": "^0.60.0",
+    "@mariozechner/pi-tui": "^0.61.0",
     "better-sqlite3": "^12.8.0",
+    "commander": "^14.0.3",
     "croner": "^10.0.1",
     "dingtalk-stream-sdk-nodejs": "^2.0.4",
     "dotenv": "^17.3.1",
