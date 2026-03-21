@@ -53,7 +53,7 @@ function prompt(rl: readline.Interface, question: string): Promise<string> {
 }
 
 /** If value is ${VAR} format, ensure the var name is in .env file. */
-function ensureEnvVar(envPath: string, value: string): string | null {
+export function ensureEnvVar(envPath: string, value: string): string | null {
   const match = value.match(/^\$\{(.+)\}$/);
   if (!match) return null;
   const varName = match[1];
@@ -68,6 +68,31 @@ function ensureEnvVar(envPath: string, value: string): string | null {
     fs.appendFileSync(envPath, content.endsWith('\n') || !content ? line : `\n${line}`, 'utf-8');
   }
 
+  return varName;
+}
+
+/**
+ * Write a raw API key value to .env under an auto-generated variable name.
+ * Returns the variable name (e.g. "DEEPSEEK_API_KEY").
+ */
+export function writeApiKeyToEnv(envPath: string, providerName: string, apiKey: string): string {
+  const varName = `${providerName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_API_KEY`;
+
+  let content = '';
+  if (fs.existsSync(envPath)) {
+    content = fs.readFileSync(envPath, 'utf-8');
+  }
+
+  // Replace existing or append
+  const regex = new RegExp(`^${varName}=.*$`, 'm');
+  if (regex.test(content)) {
+    content = content.replace(regex, `${varName}=${apiKey}`);
+  } else {
+    const line = `${varName}=${apiKey}\n`;
+    content += content.endsWith('\n') || !content ? line : `\n${line}`;
+  }
+
+  fs.writeFileSync(envPath, content, 'utf-8');
   return varName;
 }
 

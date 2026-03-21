@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Command } from 'commander';
-import { initHome, getConfigPath, getEnvPath } from './service/paths.js';
+import { initHome, getConfigPath } from './service/paths.js';
 import { daemonStart, daemonStop, daemonStatus, isRunning } from './service/daemon.js';
 
 const program = new Command();
@@ -85,64 +85,32 @@ program
     }
   });
 
+// ── miniclaw setup ──
+program
+  .command('setup')
+  .description('引导式初始化向导（配置模型、聊天平台）')
+  .action(async () => {
+    const home = resolveHome();
+    const { runSetupWizard } = await import('./service/setup-wizard.js');
+    await runSetupWizard(home);
+  });
+
 // ── miniclaw init ──
 program
   .command('init')
-  .description('在 home 目录初始化配置模板')
-  .action(() => {
+  .description('在 home 目录初始化配置（首次运行自动进入引导向导）')
+  .action(async () => {
     const home = resolveHome();
     const configPath = getConfigPath();
-    const envPath = getEnvPath();
 
     if (!fs.existsSync(configPath)) {
-      const template = `# MiniClaw 配置文件
-# 详情参考项目文档
-
-llm:
-  provider: zhipuai
-  providers:
-    zhipuai:
-      apiKey: \${ZHIPUAI_API_KEY}
-      baseUrl: https://open.bigmodel.cn/api/paas/v4
-      model: glm-4-flash
-
-chat:
-  adapters:
-    dingtalk:
-      enabled: false
-      clientId: \${DINGTALK_CLIENT_ID}
-      clientSecret: \${DINGTALK_CLIENT_SECRET}
-    feishu:
-      enabled: false
-      appId: \${FEISHU_APP_ID}
-      appSecret: \${FEISHU_APP_SECRET}
-
-scheduler:
-  enabled: true
-`;
-      fs.writeFileSync(configPath, template, 'utf-8');
-      console.log(`✓ 已创建配置文件: ${configPath}`);
+      // First run — launch interactive wizard
+      const { runSetupWizard } = await import('./service/setup-wizard.js');
+      await runSetupWizard(home);
     } else {
       console.log(`  配置文件已存在: ${configPath}`);
+      console.log(`  使用 miniclaw setup 重新配置，或 miniclaw config 修改配置`);
     }
-
-    if (!fs.existsSync(envPath)) {
-      const envTemplate = `# MiniClaw 环境变量
-# 在下方填入实际值
-
-ZHIPUAI_API_KEY=
-DINGTALK_CLIENT_ID=
-DINGTALK_CLIENT_SECRET=
-FEISHU_APP_ID=
-FEISHU_APP_SECRET=
-`;
-      fs.writeFileSync(envPath, envTemplate, 'utf-8');
-      console.log(`✓ 已创建环境变量文件: ${envPath}`);
-    } else {
-      console.log(`  环境变量文件已存在: ${envPath}`);
-    }
-
-    console.log(`\n下一步: 编辑 ${configPath} 和 ${envPath}，然后运行 miniclaw start`);
   });
 
 // ── miniclaw config ──
