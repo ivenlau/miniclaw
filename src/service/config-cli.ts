@@ -6,11 +6,11 @@ import { getConfigPath, getEnvPath } from './paths.js';
 
 // ── Helpers ──
 
-function deepGet(obj: any, dotPath: string): any {
+export function deepGet(obj: any, dotPath: string): any {
   return dotPath.split('.').reduce((o, k) => o?.[k], obj);
 }
 
-function deepSet(obj: any, dotPath: string, value: any): void {
+export function deepSet(obj: any, dotPath: string, value: any): void {
   const keys = dotPath.split('.');
   let cur = obj;
   for (let i = 0; i < keys.length - 1; i++) {
@@ -27,13 +27,13 @@ function deepSet(obj: any, dotPath: string, value: any): void {
   cur[keys[keys.length - 1]] = value;
 }
 
-function maskSecret(value: string): string {
+export function maskSecret(value: string): string {
   if (!value || value.length < 8) return '***';
   if (value.startsWith('${')) return value; // env var ref
   return value.slice(0, 3) + '***' + value.slice(-3);
 }
 
-function maskSecrets(obj: any, secretKeys = ['apiKey', 'clientSecret', 'appSecret']): any {
+export function maskSecrets(obj: any, secretKeys = ['apiKey', 'clientSecret', 'appSecret']): any {
   if (typeof obj !== 'object' || obj == null) return obj;
   const out: any = Array.isArray(obj) ? [] : {};
   for (const [k, v] of Object.entries(obj)) {

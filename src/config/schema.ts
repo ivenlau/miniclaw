@@ -57,14 +57,19 @@ export const ConfigSchema = z.object({
         appId: envVar.default(''),
         appSecret: envVar.default(''),
       }).default(() => ({ enabled: false, appId: '', appSecret: '' })),
+      web: z.object({
+        enabled: z.boolean().default(true),
+      }).default(() => ({ enabled: true })),
     }).default(() => ({
       dingtalk: { enabled: false, clientId: '', clientSecret: '' },
       feishu: { enabled: false, appId: '', appSecret: '' },
+      web: { enabled: true },
     })),
   }).default(() => ({
     adapters: {
       dingtalk: { enabled: false, clientId: '', clientSecret: '' },
       feishu: { enabled: false, appId: '', appSecret: '' },
+      web: { enabled: true },
     },
   })),
 

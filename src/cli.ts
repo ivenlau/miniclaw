@@ -4,6 +4,7 @@ import path from 'node:path';
 import { Command } from 'commander';
 import { initHome, getConfigPath } from './service/paths.js';
 import { daemonStart, daemonStop, daemonStatus, isRunning } from './service/daemon.js';
+import { loadConfigWithHome } from './config/loader.js';
 
 const program = new Command();
 
@@ -25,9 +26,15 @@ program
   .action(() => {
     const home = resolveHome();
     try {
+      const config = loadConfigWithHome(home);
       const pid = daemonStart(home);
       console.log(`✓ MiniClaw 已启动 (PID ${pid})`);
       console.log(`  日志: ${path.join(home, 'miniclaw.log')}`);
+      if (config.chat.adapters.web.enabled) {
+        const { port, host } = config.server;
+        const displayHost = host === '0.0.0.0' ? 'localhost' : host;
+        console.log(`  Dashboard: http://${displayHost}:${port}`);
+      }
     } catch (err: any) {
       console.error(`✗ ${err.message}`);
       process.exit(1);
@@ -59,8 +66,14 @@ program
       await daemonStop(home);
       console.log('✓ 已停止旧服务');
     }
+    const config = loadConfigWithHome(home);
     const pid = daemonStart(home);
     console.log(`✓ MiniClaw 已重启 (PID ${pid})`);
+    if (config.chat.adapters.web.enabled) {
+      const { port, host } = config.server;
+      const displayHost = host === '0.0.0.0' ? 'localhost' : host;
+      console.log(`  Dashboard: http://${displayHost}:${port}`);
+    }
   });
 
 // ── miniclaw status ──
@@ -80,6 +93,14 @@ program
       console.log(`  运行时间: ${h}h ${m}m ${s}s`);
       console.log(`  配置: ${status.configPath}`);
       console.log(`  日志: ${status.logPath}`);
+      try {
+        const config = loadConfigWithHome(home);
+        if (config.chat.adapters.web.enabled) {
+          const { port, host } = config.server;
+          const displayHost = host === '0.0.0.0' ? 'localhost' : host;
+          console.log(`  Dashboard: http://${displayHost}:${port}`);
+        }
+      } catch { /* config may not exist */ }
     } else {
       console.log('✗ MiniClaw 未运行');
     }

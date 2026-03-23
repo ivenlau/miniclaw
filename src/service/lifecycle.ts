@@ -14,6 +14,7 @@ import { handleMessage } from '../agent/orchestrator.js';
 const log = createLogger('lifecycle');
 
 let ipcServer: import('node:net').Server | null = null;
+let webServer: import('fastify').FastifyInstance | null = null;
 
 export interface StartOptions {
   home?: string;
@@ -57,23 +58,29 @@ export async function startService(options?: StartOptions) {
   // 6. Start chat adapters
   await startAllAdapters();
 
-  // 7. Init scheduler
+  // 7. Start web dashboard
+  if (config.chat.adapters.web.enabled) {
+    const { startWebServer } = await import('../web/server.js');
+    webServer = await startWebServer(config);
+  }
+
+  // 8. Init scheduler
   if (config.scheduler.enabled) {
     initScheduler();
   }
 
-  // 8. Start IPC server (for TUI connections)
+  // 9. Start IPC server (for TUI connections)
   const enableIpc = options?.enableIpc ?? true;
   if (enableIpc) {
     const { startIpcServer } = await import('./ipc.js');
     ipcServer = startIpcServer(getIpcPath());
   }
 
-  // 9. Write PID file
+  // 10. Write PID file
   const pidPath = getPidPath();
   fs.writeFileSync(pidPath, `${process.pid}\n${Date.now()}`, 'utf-8');
 
-  // 10. Graceful shutdown
+  // 11. Graceful shutdown
   const shutdown = async (signal: string) => {
     log.info({ signal }, 'Shutting down...');
     await stopService();
@@ -97,6 +104,12 @@ export async function startService(options?: StartOptions) {
 export async function stopService() {
   stopScheduler();
   await stopAllAdapters();
+
+  // Close web server
+  if (webServer) {
+    await webServer.close();
+    webServer = null;
+  }
 
   // Close IPC server
   if (ipcServer) {
